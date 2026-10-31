@@ -1,8 +1,8 @@
 {
- "version": "0.1.1",
- "url": "https://raw.githubusercontent.com/kree8tiv2003/pcforge/updates/PCForge.exe",
- "sha256": "2faf1c0a3b8de59f4e53ceae84b88d471cc349a6ee6216122d0833a3887955f5",
- "size": 16169293,
- "notes": "Self-update is now delivered and installed by PCForge itself. Undo & History, friendlier scans.",
- "signature": "bpSctdBQ9LBIsaV+Kd2fJDjZNHxlLYxqcNoUjrQWCtBXtzB/uA3VgUiDoUGwZ5haUVKk78XSprD1oTIarRzpBA=="
+ "version": "0.1.2",
+ "url": "https://raw.githubusercontent.com/kree8tiv2003/pcforge/updates/PCForge-0.1.2.exe",
+ "sha256": "a3b9a881103550b55c5002c633c6a6751bc3a4b55d49b998dce7b8b1b6397cb4",
+ "size": 16173829,
+ "notes": "Safer Privacy Sweep: passwords, cookies, history and autofill are backed up before removal and can be restored from Undo & History. 'Tick all' now ticks only safe items, and ticking saved passwords shows a clear warning.",
+ "signature": "7F48/uWRS6VdbhLSDkI8Kz1TT3zKKq5i9cM6qD/SitGLNjPQxRmt2/FQZ+eK+HTiqpfQt7jVZnRaJBrNoxWhAA=="
 }
