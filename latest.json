@@ -1,0 +1,8 @@
+{
+ "version": "0.1.1",
+ "url": "https://raw.githubusercontent.com/kree8tiv2003/pcforge/updates/PCForge.exe",
+ "sha256": "2faf1c0a3b8de59f4e53ceae84b88d471cc349a6ee6216122d0833a3887955f5",
+ "size": 16169293,
+ "notes": "Self-update is now delivered and installed by PCForge itself. Undo & History, friendlier scans.",
+ "signature": "bpSctdBQ9LBIsaV+Kd2fJDjZNHxlLYxqcNoUjrQWCtBXtzB/uA3VgUiDoUGwZ5haUVKk78XSprD1oTIarRzpBA=="
+}
