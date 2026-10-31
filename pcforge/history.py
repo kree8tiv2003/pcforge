@@ -113,6 +113,38 @@ def restore_quarantined(item: dict) -> bool:
     return True
 
 
+def browser_backups() -> list[Path]:
+    root = data_dir() / "browser-backups"
+    return sorted((p for p in root.glob("*") if (p / "manifest.json").exists()), reverse=True) if root.exists() else []
+
+
+def restore_browser_backup(folder: Path) -> tuple[int, list[str]]:
+    """Put back files a Privacy Sweep removed. Refuses while a browser is open. Whatever the browser has
+    created in the meantime is kept next to the file as '<name>.before-restore'."""
+    from . import privacy
+    busy = [n for n, (_r, proc) in privacy.CHROMIUM.items() if privacy._running(proc)]
+    if privacy._running("firefox.exe"):
+        busy.append("Firefox")
+    if busy:
+        return 0, [f"close {', '.join(busy)} first"]
+    restored, problems = 0, []
+    for e in json.loads((Path(folder) / "manifest.json").read_text(encoding="utf-8")):
+        src, dst = Path(e["backup"]), Path(e["original"])
+        try:
+            if dst.exists():
+                aside = dst.with_name(dst.name + ".before-restore")
+                if aside.exists():
+                    shutil.rmtree(aside) if aside.is_dir() else aside.unlink()
+                dst.rename(aside)
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copytree(src, dst) if src.is_dir() else shutil.copy2(src, dst)
+            restored += 1
+        except OSError as ex:
+            problems.append(f"{dst.name}: {ex}")
+    log_action("browser-restore", str(folder), files=restored)
+    return restored, problems
+
+
 def undo_turbo() -> int:
     return turbo.restore()
 

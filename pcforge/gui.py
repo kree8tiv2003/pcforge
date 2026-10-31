@@ -134,7 +134,7 @@ class ScanFixPage(Page):
         self.scan_btn.pack(side="left")
         self.fix_btn = ttk.Button(bar, text=fix_label, command=self.fix, state="disabled")
         self.fix_btn.pack(side="left", padx=8)
-        ttk.Button(bar, text="Tick all", command=lambda: self._set_all(True)).pack(side="left")
+        ttk.Button(bar, text="Tick safe items", command=lambda: self._set_all(True)).pack(side="left")
         ttk.Button(bar, text="Untick all", command=lambda: self._set_all(False)).pack(side="left", padx=4)
         self.ignore_btn = ttk.Button(bar, text="Always skip highlighted", command=self.ignore_selected)
         self.ignore_btn.pack(side="right")
@@ -173,8 +173,9 @@ class ScanFixPage(Page):
                 self.tree.set(str(i), "sel", "☑" if self.items[i].selected else "☐")
 
     def _set_all(self, value: bool):
+        """'Tick safe items' only ticks low-risk findings; passwords, cookies, history and the like are never bulk-ticked."""
         for f in self.items:
-            f.selected = value
+            f.selected = (f.risk == "low") if value else False
         self._refresh_boxes()
 
     def _toggle(self, ev):
@@ -246,8 +247,18 @@ class ScanFixPage(Page):
         if not pick:
             return messagebox.showinfo(brand.NAME, "Nothing is ticked.")
         size = sum(f.size for f in pick)
-        if not messagebox.askyesno(brand.NAME, f"Apply to {len(pick)} ticked item(s)" + (f" ({fmt_size(size)})" if size else "") +
-                                   "?\n\nRegistry changes are backed up first. Deleted files usually can't be brought back."):
+        risky = privacy.sensitive_summary(pick)
+        if risky:
+            names = {"passwords": "SAVED PASSWORDS", "cookies": "cookies (you'll be signed out of websites)",
+                     "history": "browsing history", "autofill": "autofill data (saved addresses and cards)"}
+            lines = "\n".join(f"  • {names[k]}: {n} file(s)" for k, n in risky.items())
+            warn = ("You ticked data that signs you out and can wipe saved logins:\n\n" + lines +
+                    "\n\nBefore going on, make sure your passwords are also saved online (passwords.google.com) or in your password manager."
+                    "\nPCForge keeps a copy first, and Undo & History > Restore browser data can put it back.\n\nContinue?")
+            if not messagebox.askyesno(brand.NAME, warn, icon="warning", default="no"):
+                return
+        elif not messagebox.askyesno(brand.NAME, f"Apply to {len(pick)} ticked item(s)" + (f" ({fmt_size(size)})" if size else "") +
+                                     "?\n\nRegistry changes are backed up first. Deleted files usually can't be brought back."):
             return
         self.fix_btn.configure(state="disabled")
         self.busy(True, "Working…")
@@ -376,7 +387,8 @@ class HistoryPage(Page):
         bar = ttk.Frame(self, style="Page.TFrame")
         bar.pack(fill="x")
         ttk.Button(bar, text="Refresh", style="Accent.TButton", command=self.refresh).pack(side="left")
-        for text, fn in (("Undo registry cleaning…", self.undo_registry), ("Restore a quarantined file…", self.undo_quarantine),
+        for text, fn in (("Undo registry cleaning…", self.undo_registry), ("Restore browser data…", self.undo_browser),
+                         ("Restore a quarantined file…", self.undo_quarantine),
                          ("Wake paused programs", self.undo_turbo), ("Undo tracking protection", self.undo_hardening),
                          ("Edit skip list…", self.skip_list)):
             ttk.Button(bar, text=text, command=fn).pack(side="left", padx=4)
@@ -401,6 +413,18 @@ class HistoryPage(Page):
         newest = backs[0]
         if messagebox.askyesno(brand.NAME, f"Put back the registry entries removed on {newest.name[:8]} at {newest.name[9:11]}:{newest.name[11:13]}?"):
             self.say(f"Restored {history.undo_registry(newest)} backup file(s).")
+            self.refresh()
+
+    def undo_browser(self):
+        backs = history.browser_backups()
+        if not backs:
+            return messagebox.showinfo(brand.NAME, "PCForge has no saved copy of browser data. It only keeps one from now on, "
+                                       "when a Privacy Sweep removes history, cookies, passwords or autofill.")
+        newest = backs[0]
+        if messagebox.askyesno(brand.NAME, f"Put back the browser data removed on {newest.name[:8]} at {newest.name[9:11]}:{newest.name[11:13]}?\n\n"
+                               "Close your browser first. Anything it created since is kept next to it as '.before-restore'."):
+            n, problems = history.restore_browser_backup(newest)
+            self.say(f"Restored {n} file(s)." + ("  " + "; ".join(problems) if problems else ""))
             self.refresh()
 
     def undo_quarantine(self):

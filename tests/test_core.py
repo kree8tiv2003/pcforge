@@ -247,6 +247,68 @@ class HistoryAndReport(unittest.TestCase):
         self.assertIn("a note", text)
 
 
+class BrowserDataSafety(unittest.TestCase):
+    """Passwords/cookies/history/autofill must be backed up before removal and restorable."""
+
+    def setUp(self):
+        from pcforge import privacy
+        self.privacy = privacy
+        self.data = Path(tempfile.mkdtemp())
+        for mod in (safety, history, privacy):
+            p = mock.patch.object(mod, "data_dir", return_value=self.data)
+            p.start()
+            self.addCleanup(p.stop)
+        self.profile = Path(tempfile.mkdtemp()) / "User Data" / "Default"
+        self.profile.mkdir(parents=True)
+        self.root = str(self.profile.parent)
+        (self.profile / "Login Data").write_bytes(b"SECRET-LOGINS" * 100)
+        (self.profile / "Cache").mkdir()
+        (self.profile / "Cache" / "f").write_bytes(b"c" * 50)
+
+    def finding(self, name, cat, selected=True):
+        path = str(self.profile / name)
+        return safety.Finding(f"browser-{cat}", f"Test {cat}", path, os.path.getsize(path) if os.path.isfile(path) else 50,
+                              risk="high" if cat == "passwords" else "low", selected=selected,
+                              meta=dict(roots=[self.root], browser_running=False))
+
+    def test_sweep_backs_up_passwords_then_restore_brings_them_back(self):
+        f = self.finding("Login Data", "passwords")
+        res = self.privacy.sweep([f], dry_run=False)
+        self.assertEqual(res.removed, 1, res.skipped)
+        self.assertFalse((self.profile / "Login Data").exists())
+        backups = history.browser_backups()
+        self.assertEqual(len(backups), 1)
+        (self.profile / "Login Data").write_bytes(b"fresh-empty-db")          # the browser recreated it
+        with mock.patch.object(self.privacy, "_running", return_value=False):
+            n, problems = history.restore_browser_backup(backups[0])
+        self.assertEqual((n, problems), (1, []))
+        self.assertEqual((self.profile / "Login Data").read_bytes(), b"SECRET-LOGINS" * 100)
+        self.assertEqual((self.profile / "Login Data.before-restore").read_bytes(), b"fresh-empty-db")
+
+    def test_restore_refuses_while_browser_is_open(self):
+        self.privacy.sweep([self.finding("Login Data", "passwords")], dry_run=False)
+        with mock.patch.object(self.privacy, "_running", return_value=True):
+            n, problems = history.restore_browser_backup(history.browser_backups()[0])
+        self.assertEqual(n, 0)
+        self.assertIn("close", problems[0])
+
+    def test_cache_is_not_backed_up(self):
+        self.privacy.sweep([self.finding("Cache", "cache")], dry_run=False)
+        self.assertEqual(history.browser_backups(), [], "caches are disposable; no backup needed")
+
+    def test_file_is_left_alone_if_backup_fails(self):
+        with mock.patch.object(self.privacy, "_backup_before_delete", return_value=False):
+            res = self.privacy.sweep([self.finding("Login Data", "passwords")], dry_run=False)
+        self.assertTrue((self.profile / "Login Data").exists())
+        self.assertIn("back it up", res.skipped[0][1].lower())
+
+    def test_sensitive_summary_flags_ticked_passwords_only(self):
+        a = self.finding("Login Data", "passwords")
+        b = self.finding("Cache", "cache")
+        c = self.finding("Login Data", "history", selected=False)
+        self.assertEqual(self.privacy.sensitive_summary([a, b, c]), {"passwords": 1})
+
+
 class IconAsset(unittest.TestCase):
     def test_icon_files_are_valid(self):
         root = Path(__file__).resolve().parent.parent / "assets"

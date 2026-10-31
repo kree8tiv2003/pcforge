@@ -2,7 +2,7 @@
 
 NAME = "PCForge"              # placeholder: replace with your own product name
 TAGLINE = "Clean. Tune. Protect."
-VERSION = "0.1.1"
+VERSION = "0.1.2"
 DATA_FOLDER = NAME            # created under %LOCALAPPDATA%
 HOSTS_MARKER = NAME.upper()   # tags the block we add to the hosts file
 

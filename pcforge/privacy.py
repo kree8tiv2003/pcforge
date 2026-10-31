@@ -9,11 +9,12 @@ import ctypes
 import glob
 import os
 import subprocess
+import time
 import winreg
 
 import psutil
 
-from .safety import CleanResult, Finding, delete_path, filter_ignored, tree_size, log_action
+from .safety import CleanResult, Finding, data_dir, delete_path, filter_ignored, tree_size, log_action
 
 LOCAL = os.environ.get("LOCALAPPDATA", "")
 ROAM = os.environ.get("APPDATA", "")
@@ -163,8 +164,44 @@ def _clear_clipboard() -> None:
         u.CloseClipboard()
 
 
+SENSITIVE = {"history", "cookies", "passwords", "autofill"}
+
+
+def sensitive_summary(findings: list[Finding]) -> dict[str, int]:
+    """How many ticked items are in categories you can't get back (passwords, cookies, history, autofill)."""
+    out: dict[str, int] = {}
+    for f in findings:
+        cat = f.category.split("-", 1)[-1] if f.category.startswith("browser-") else ""
+        if f.selected and cat in SENSITIVE:
+            out[cat] = out.get(cat, 0) + 1
+    return out
+
+
+def _backup_before_delete(f: Finding, bdir) -> bool:
+    """Copy a sensitive browser file into PCForge's backup folder first. False means don't delete it."""
+    import json
+    import shutil
+    try:
+        root = (f.meta.get("roots") or [""])[0]
+        rel = os.path.relpath(f.path, root) if root else os.path.basename(f.path)
+        dest = bdir / f.label.replace(" ", "_") / rel
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        if os.path.isdir(f.path):
+            shutil.copytree(f.path, dest, dirs_exist_ok=True)
+        else:
+            shutil.copy2(f.path, dest)
+        manifest = bdir / "manifest.json"
+        entries = json.loads(manifest.read_text(encoding="utf-8")) if manifest.exists() else []
+        entries.append({"original": f.path, "backup": str(dest), "what": f.label})
+        manifest.write_text(json.dumps(entries, indent=1), encoding="utf-8")
+        return True
+    except OSError:
+        return False
+
+
 def sweep(findings: list[Finding], dry_run: bool = True) -> CleanResult:
     res = CleanResult()
+    bdir = None
     for f in findings:
         m = f.meta
         sp = m.get("special")
@@ -193,6 +230,14 @@ def sweep(findings: list[Finding], dry_run: bool = True) -> CleanResult:
             if m.get("browser_running"):
                 res.skipped.append((f.path, "browser is open; close it first"))
                 continue
+            cat = f.category.split("-", 1)[-1] if f.category.startswith("browser-") else ""
+            if cat in SENSITIVE and not dry_run:
+                if bdir is None:
+                    bdir = data_dir() / "browser-backups" / time.strftime("%Y%m%d-%H%M%S")
+                    bdir.mkdir(parents=True, exist_ok=True)
+                if not _backup_before_delete(f, bdir):
+                    res.skipped.append((f.path, "could not back it up first, so it was left alone"))
+                    continue
             freed, err = delete_path(f.path, m.get("roots", []), dry_run)
             res.add(f.path, freed, err)
     if not dry_run:
