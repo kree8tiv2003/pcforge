@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+build/
+dist/
+dist_test/
+*.spec
+*.key
+*.pem
+*.part
+update_private.key
+latest.json
