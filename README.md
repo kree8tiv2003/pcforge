@@ -23,9 +23,13 @@ never share it**). PCForge refuses anything that is not signed by that key, or w
 
 To release a new version:
 1. Change `VERSION` in `pcforge/brand.py` and rebuild the exe.
-2. `python tools/publish_update.py --exe dist/PCForge.exe --version 0.2.0 --url https://<your host>/PCForge.exe --key C:\Users\<you>\PCForge-keys\update_private.key --notes "What changed"`
-3. Upload `PCForge.exe` and the generated `latest.json` to your host. The address of `latest.json` must be set as
-   `UPDATE_MANIFEST_URL` in `pcforge/brand.py` (rebuild once with it; after that, updates flow by themselves).
+2. Name the file after its version so a cached copy can never be confused with a newer one, then sign it:
+   `copy dist\PCForge.exe dist\PCForge-0.2.0.exe`
+   `python tools/publish_update.py --exe dist/PCForge-0.2.0.exe --version 0.2.0 --url https://raw.githubusercontent.com/kree8tiv2003/pcforge/updates/PCForge-0.2.0.exe --key C:\Users\<you>\PCForge-keys\update_private.key --notes "What changed" --out dist/latest.json`
+3. Add both files to the `updates` branch of the repo (keep the previous exe there too) and push it. GitHub caches
+   raw files for a few minutes; PCForge refuses any download that doesn't match the signed fingerprint, so a stale
+   cache just means the update shows up a few minutes later.
+   The address of `latest.json` is `UPDATE_MANIFEST_URL` in `pcforge/brand.py` (already set to this repo).
 
 `python -m pcforge selftest` checks that signing and secure connections work in the build.
 

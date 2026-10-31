@@ -202,15 +202,23 @@ if exist "%TARGET%" {'start "" "%TARGET%"' if relaunch else 'rem relaunch disabl
 """
 
 
-def apply_and_restart(new: Path, target: Path | None = None) -> None:
-    """Start the swap script detached. The caller must exit right after this returns."""
+def apply_and_restart(new: Path, target: Path | None = None, pid: int | None = None, relaunch: bool = True) -> None:
+    """Start the swap script in its own hidden console. The caller must exit right after this returns.
+
+    Do NOT add DETACHED_PROCESS here: a console-less cmd.exe silently fails to run the script's
+    tasklist/find/ping steps (verified), so the update would never finish.
+    """
     if not getattr(sys, "frozen", False) and target is None:
         raise UpdateError("updates can only be installed into the packaged PCForge.exe")
     target = target or Path(sys.executable)
     script = data_dir() / "apply_update.cmd"
-    script.write_text(build_swap_script(os.getpid(), new, target, data_dir() / "update_result.txt"), encoding="utf-8")
-    flags = 0x00000008 | 0x08000000 | 0x00000200      # DETACHED_PROCESS | CREATE_NO_WINDOW | NEW_PROCESS_GROUP
-    subprocess.Popen(["cmd", "/c", str(script)], creationflags=flags, close_fds=True)
+    script.write_text(build_swap_script(pid or os.getpid(), new, target, data_dir() / "update_result.txt", relaunch), encoding="utf-8")
+    flags = 0x08000000 | 0x00000200                    # CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP
+    # A packaged exe that starts another copy of itself inherits its parent's temp-folder settings, and the
+    # relaunched copy then dies silently once the parent cleans up. This tells the new copy to start fresh.
+    env = {**os.environ, "PYINSTALLER_RESET_ENVIRONMENT": "1"}
+    env.pop("_MEIPASS2", None)
+    subprocess.Popen(["cmd", "/c", str(script)], creationflags=flags, close_fds=True, env=env)
     log_action("update-applied", f"{target} <- {new.name}")
 
 

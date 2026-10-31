@@ -679,6 +679,12 @@ class UpdatesPage(Page):
         self.pack_log()
         if not brand.UPDATE_MANIFEST_URL:
             self.status.set("Updates aren't switched on yet: no update address has been set up for this copy.")
+        info = shared.get("info")
+        if info:                                           # opened from the "update available" banner
+            self.status.set(f"Version {info.version} is available" + (f" ({fmt_size(info.size)})." if info.size else "."))
+            self.say(f"What's new in {info.version}:\n{info.notes or '(no notes)'}")
+        elif shared.get("ready"):
+            self.status.set("The update is downloaded and verified. Click Install to restart into it.")
         self.refresh_buttons()
 
     def refresh_buttons(self):

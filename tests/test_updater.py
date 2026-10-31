@@ -162,6 +162,39 @@ class SwapScript(unittest.TestCase):
         self.assertEqual(log.read_text().strip(), "ok")
         self.assertFalse((d / "swap.cmd").exists(), "the script deletes itself")
 
+    def test_launched_exactly_like_the_app_does(self):
+        """Regression: with DETACHED_PROCESS the script never ran. apply_and_restart must really swap the file."""
+        import time
+        d = Path(tempfile.mkdtemp())
+        target, new = d / "PCForge.exe", d / "new.exe"
+        target.write_bytes(b"OLD")
+        new.write_bytes(b"NEW")
+        gone = subprocess.Popen([sys.executable, "-c", "pass"])
+        gone.wait()
+        result = updater.data_dir() / "update_result.txt"
+        result.unlink(missing_ok=True)
+        updater.apply_and_restart(new, target=target, pid=gone.pid, relaunch=False)
+        for _ in range(40):
+            if result.exists():
+                break
+            time.sleep(0.5)
+        self.assertTrue(result.exists(), "the swap script never ran")
+        self.assertEqual(result.read_text().strip(), "ok")
+        self.assertEqual(target.read_bytes(), b"NEW")
+
+    def test_relaunch_environment_is_reset_for_packaged_exe(self):
+        from unittest import mock
+        d = Path(tempfile.mkdtemp())
+        (d / "n.exe").write_bytes(b"N")
+        (d / "t.exe").write_bytes(b"T")
+        with mock.patch.object(updater.subprocess, "Popen") as popen, mock.patch.dict(os.environ, {"_MEIPASS2": r"C:\gone"}):
+            updater.apply_and_restart(d / "n.exe", target=d / "t.exe", pid=1)
+        env = popen.call_args.kwargs["env"]
+        self.assertEqual(env["PYINSTALLER_RESET_ENVIRONMENT"], "1")
+        self.assertNotIn("_MEIPASS2", env)
+        flags = popen.call_args.kwargs["creationflags"]
+        self.assertFalse(flags & 0x00000008, "DETACHED_PROCESS stops the swap script from running")
+
     def test_failed_swap_leaves_old_exe_in_place(self):
         d, target, new, log = self.run_script(lock_target=True)
         self.assertEqual(log.read_text().strip(), "failed")
